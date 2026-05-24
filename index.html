@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0B0B0F">
+<title>室内测量</title>
+<style>
+:root{
+  --bg:#0B0B0F;--surf:#141419;--surf2:#1D1D26;--bdr:#252533;
+  --acc:#C8F500;--blue:#3BC5FF;--org:#FF6B35;--txt:#E2E2EE;--muted:#50506A;
+  --sat:env(safe-area-inset-top,0px);--sab:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;overflow:hidden;background:#000;
+  font-family:-apple-system,'PingFang SC',system-ui,sans-serif}
+button{cursor:pointer;border:none;font-family:inherit}
+
+/* ── Screens ── */
+.scr{position:fixed;inset:0;display:none;flex-direction:column;
+  background:var(--bg);padding-top:var(--sat);padding-bottom:var(--sab)}
+.scr.on{display:flex}
+
+/* ── Home ── */
+#s-home{align-items:center;justify-content:center}
+.home-inner{display:flex;flex-direction:column;align-items:center;padding:28px;width:100%;max-width:360px}
+.app-icon{width:88px;height:88px;border-radius:22px;margin-bottom:20px;
+  background:linear-gradient(145deg,#1E2D0A,#0A0B08);
+  border:1.5px solid rgba(200,245,0,.2);
+  display:flex;align-items:center;justify-content:center;font-size:44px;
+  box-shadow:0 0 40px rgba(200,245,0,.1),0 16px 48px rgba(0,0,0,.5)}
+.app-name{font-size:26px;font-weight:700;letter-spacing:-.3px;margin-bottom:6px;color:var(--txt)}
+.app-desc{font-size:14px;color:var(--muted);line-height:1.8;text-align:center;margin-bottom:36px}
+.steps{display:flex;width:100%;margin-bottom:36px}
+.step{flex:1;display:flex;flex-direction:column;align-items:center;gap:8px;position:relative}
+.step:not(:last-child)::after{content:'';position:absolute;top:14px;left:calc(50% + 16px);
+  width:calc(100% - 32px);height:1px;background:var(--bdr)}
+.step-dot{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:700;background:var(--bg);z-index:1;position:relative}
+.step-lbl{font-size:11px;color:var(--muted);font-weight:500}
+.btn-start{width:100%;height:56px;border-radius:16px;background:var(--acc);
+  color:#080A04;font-size:18px;font-weight:700;
+  box-shadow:0 4px 20px rgba(200,245,0,.3);transition:transform .1s}
+.btn-start:active{transform:scale(.96)}
+#home-err{color:#FF4466;font-size:13px;text-align:center;margin-top:12px;display:none}
+
+/* ── Camera (video + overlay at body level) ── */
+#video{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:50;display:none;background:#000}
+#cam-overlay{position:fixed;inset:0;z-index:60;pointer-events:none;display:none}
+.grid{position:absolute;inset:0;
+  background-image:linear-gradient(rgba(200,245,0,.1) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(200,245,0,.1) 1px,transparent 1px);
+  background-size:33.33% 33.33%}
+.corners{position:absolute;inset:0}
+.corner{position:absolute;width:22px;height:22px;border-color:var(--acc);border-style:solid;border-width:0}
+.corner.tl{top:16px;left:16px;border-top-width:2.5px;border-left-width:2.5px;border-radius:3px 0 0 0}
+.corner.tr{top:16px;right:16px;border-top-width:2.5px;border-right-width:2.5px;border-radius:0 3px 0 0}
+.corner.bl{bottom:110px;left:16px;border-bottom-width:2.5px;border-left-width:2.5px;border-radius:0 0 0 3px}
+.corner.br{bottom:110px;right:16px;border-bottom-width:2.5px;border-right-width:2.5px;border-radius:0 0 3px 0}
+.cam-tip{position:absolute;top:16px;left:16px;right:16px;text-align:center;
+  background:rgba(0,0,0,.55);border-radius:22px;padding:8px 16px;
+  color:rgba(255,255,255,.8);font-size:13px;backdrop-filter:blur(8px)}
+.cam-bar{position:absolute;bottom:0;left:0;right:0;pointer-events:all;
+  padding:16px 0 calc(var(--sab) + 16px);
+  background:linear-gradient(transparent,rgba(0,0,0,.88));
+  display:flex;align-items:center;justify-content:center;gap:48px}
+.btn-cancel{color:rgba(255,255,255,.65);font-size:16px;background:none;padding:12px;pointer-events:all}
+.btn-shutter{width:72px;height:72px;border-radius:50%;border:3.5px solid rgba(255,255,255,.4);
+  background:transparent;display:flex;align-items:center;justify-content:center;
+  pointer-events:all;transition:transform .1s,opacity .2s}
+.btn-shutter::after{content:'';width:56px;height:56px;border-radius:50%;background:#fff}
+.btn-shutter:active{transform:scale(.9)}
+.btn-shutter:disabled{opacity:.3}
+
+/* ── Measure screen ── */
+#s-msr{background:#000}
+.nav-bar{height:48px;background:var(--surf);border-bottom:1px solid var(--bdr);
+  display:flex;align-items:center;justify-content:space-between;padding:0 16px;flex-shrink:0}
+.nav-back{color:var(--blue);font-size:15px;font-weight:500;background:none;padding:8px 0}
+.nav-title{font-size:16px;font-weight:600;color:var(--txt)}
+.nav-undo{color:var(--acc);font-size:15px;font-weight:600;background:none;
+  padding:8px 0;opacity:0;pointer-events:none;transition:opacity .2s}
+.nav-undo.show{opacity:1;pointer-events:all}
+.photo-area{flex:1;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;min-height:0}
+#cv{max-width:100%;max-height:100%;display:block;touch-action:none}
+.overlay-hint{position:absolute;top:10px;left:12px;right:12px;
+  background:rgba(8,8,15,.9);border-radius:14px;padding:11px 15px;
+  backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.06);display:none}
+.overlay-hint.on{display:block}
+.hint-h{font-size:14px;font-weight:600;margin-bottom:3px}
+.hint-b{font-size:12px;color:var(--muted)}
+.panel{background:var(--surf);border-top:1px solid var(--bdr);
+  padding:14px 16px;flex-shrink:0;display:none}
+.panel.on{display:block}
+.panel-tip{font-size:13px;color:var(--muted);text-align:center;line-height:1.75;margin-bottom:10px}
+.p-row{display:flex;gap:8px;justify-content:center}
+.p-btn{flex:1;height:46px;border-radius:12px;font-size:14px;font-weight:600;
+  background:var(--surf2);border:1.5px solid var(--bdr);color:var(--muted);transition:opacity .1s}
+.p-btn:active{opacity:.65}
+.p-btn.hi{border-color:rgba(200,245,0,.3);background:rgba(200,245,0,.07);color:var(--acc)}
+.results-wrap{max-height:36vh;overflow-y:auto}
+.sec-title{font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.1em;text-transform:uppercase;
+  margin-bottom:9px;display:flex;align-items:center;gap:8px}
+.sec-title::after{content:'';flex:1;height:1px;background:var(--bdr)}
+.result-card{display:flex;align-items:center;justify-content:space-between;
+  padding:11px 13px;margin-bottom:7px;border-radius:12px;
+  background:rgba(59,197,255,.06);border:1px solid rgba(59,197,255,.14);
+  border-left:3px solid var(--blue)}
+.r-badge{width:26px;height:26px;border-radius:50%;background:rgba(59,197,255,.15);
+  display:flex;align-items:center;justify-content:center;color:var(--blue);
+  font-size:12px;font-weight:700;margin-right:10px;flex-shrink:0}
+.r-val{font-size:22px;font-weight:700;color:var(--blue);font-variant-numeric:tabular-nums}
+.empty-hint{text-align:center;color:var(--muted);font-size:14px;padding:6px 0 12px;line-height:1.8}
+.anchor-card{background:rgba(255,107,53,.08);border:1px solid rgba(255,107,53,.25);
+  border-radius:10px;padding:10px 14px;text-align:center;color:var(--org);
+  font-size:14px;font-weight:600;margin-bottom:10px}
+.act-row{display:flex;gap:8px;margin-top:10px}
+
+/* ── Bottom sheet ── */
+#sheet-mask{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:200;
+  display:none;align-items:flex-end;backdrop-filter:blur(6px)}
+#sheet-mask.on{display:flex}
+.sheet{width:100%;background:var(--surf);border-radius:22px 22px 0 0;
+  padding:0 20px calc(var(--sab) + 24px)}
+.sheet-knob{width:36px;height:4px;border-radius:2px;background:var(--bdr);margin:12px auto 20px}
+.sheet-h{font-size:20px;font-weight:700;margin-bottom:6px;color:var(--txt)}
+.sheet-s{font-size:13px;color:var(--muted);line-height:1.7;margin-bottom:20px}
+.inp-row{display:flex;gap:10px;margin-bottom:16px;align-items:stretch}
+.inp-wrap{flex:1;position:relative;background:var(--surf2);border-radius:16px;
+  border:1.5px solid var(--bdr);overflow:hidden;transition:border-color .2s}
+.inp-wrap:focus-within{border-color:var(--acc)}
+.inp-lbl{position:absolute;top:10px;left:14px;font-size:11px;color:var(--muted);
+  font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+#ref-num{width:100%;height:82px;background:transparent;border:none;
+  color:var(--txt);font-size:38px;font-weight:700;text-align:right;
+  padding:28px 14px 8px;outline:none}
+.unit-col{display:flex;flex-direction:column;gap:6px}
+.u-btn{flex:1;background:var(--surf2);border:1.5px solid var(--bdr);border-radius:10px;
+  font-size:14px;font-weight:700;color:var(--muted);letter-spacing:.05em;
+  text-transform:uppercase;min-width:52px;height:25px;transition:all .15s}
+.u-btn.on{background:var(--acc);color:#07080A;border-color:var(--acc)}
+.sheet-btns{display:flex;gap:10px}
+.s-sec{flex:1;height:52px;background:var(--surf2);border:1.5px solid var(--bdr);
+  border-radius:14px;color:var(--muted);font-size:15px;font-weight:600}
+.s-pri{flex:1.6;height:52px;border:none;border-radius:14px;
+  background:var(--acc);color:#07080A;font-size:16px;font-weight:700;
+  box-shadow:0 4px 18px rgba(200,245,0,.22);transition:all .1s}
+.s-pri:active{transform:scale(.97)}
+.s-pri:disabled{opacity:.3}
+
+@keyframes fadein{from{opacity:0;transform:translateY(5px)}to{opacity:1}}
+</style>
+</head>
+<body>
+
+<!-- Video at body level (most reliable on Android) -->
+<video id="video" autoplay playsinline muted></video>
+
+<!-- Camera UI overlay (also body level) -->
+<div id="cam-overlay">
+  <div class="grid"></div>
+  <div class="corners">
+    <div class="corner tl"></div><div class="corner tr"></div>
+    <div class="corner bl"></div><div class="corner br"></div>
+  </div>
+  <div class="cam-tip">对准室内，确保含已知长度物体</div>
+  <div class="cam-bar">
+    <button class="btn-cancel" id="btn-cancel">取消</button>
+    <button class="btn-shutter" id="shutter" disabled></button>
+    <div style="width:60px"></div>
+  </div>
+</div>
+
+<!-- Home -->
+<div id="s-home" class="scr on">
+  <div class="home-inner">
+    <div class="app-icon">📐</div>
+    <div class="app-name">室内测量</div>
+    <div class="app-desc">拍照 · 校准比例 · 点击测距<br>快速获取室内真实尺寸</div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-dot" style="border:1.5px solid var(--acc);color:var(--acc)">①</div>
+        <div class="step-lbl">拍照</div>
+      </div>
+      <div class="step">
+        <div class="step-dot" style="border:1.5px solid var(--acc);color:var(--acc)">②</div>
+        <div class="step-lbl">设基准</div>
+      </div>
+      <div class="step">
+        <div class="step-dot" style="border:1.5px solid var(--blue);color:var(--blue)">③</div>
+        <div class="step-lbl">测量</div>
+      </div>
+    </div>
+    <button class="btn-start" id="btn-start">📷 开始拍摄</button>
+    <div id="home-err"></div>
+  </div>
+</div>
+
+<!-- Camera placeholder -->
+<div id="s-cam" class="scr" style="background:transparent;pointer-events:none"></div>
+
+<!-- Measure -->
+<div id="s-msr" class="scr">
+  <div class="nav-bar">
+    <button class="nav-back" id="btn-back">‹ 重拍</button>
+    <div class="nav-title" id="nav-t">设置基准</div>
+    <button class="nav-undo" id="nav-undo">撤销</button>
+  </div>
+  <div class="photo-area">
+    <canvas id="cv"></canvas>
+    <div class="overlay-hint on" id="hint-ref">
+      <div class="hint-h" id="hint-ref-h" style="color:var(--acc)">① 点击参考物体的起点</div>
+      <div class="hint-b">选已知长度的物体：砖缝6cm / 门宽90cm / 瓷砖60cm</div>
+    </div>
+    <div class="overlay-hint" id="hint-msr">
+      <div class="hint-h" id="hint-msr-h" style="color:var(--blue)">点击起点开始测量</div>
+      <div class="hint-b" id="hint-msr-b">点击两点，自动换算真实距离</div>
+    </div>
+  </div>
+  <div class="panel on" id="p-ref">
+    <div class="panel-tip">选一个<strong style="color:var(--txt)">已知长度</strong>的参照物，点击两端</div>
+    <div class="p-row"><button class="p-btn" id="ref-undo-btn" style="display:none">↩ 撤销起点</button></div>
+  </div>
+  <div class="panel" id="p-msr">
+    <div class="results-wrap">
+      <div id="results-list"></div>
+      <div id="anchor-card" class="anchor-card" style="display:none">🎯 已设起点 — 再点击终点</div>
+      <div id="empty-hint" class="empty-hint">在照片上点击两点<br>测量它们之间的真实距离</div>
+    </div>
+    <div class="act-row">
+      <button class="p-btn" id="undo-msr" style="display:none">↩ 撤销</button>
+      <button class="p-btn hi" id="btn-reset-ref">重设基准</button>
+      <button class="p-btn" id="btn-rehome">重拍</button>
+    </div>
+  </div>
+</div>
+
+<!-- Sheet -->
+<div id="sheet-mask">
+  <div class="sheet">
+    <div class="sheet-knob"></div>
+    <div class="sheet-h">输入参考长度</div>
+    <div class="sheet-s">绿色线段在现实中有多长？</div>
+    <div class="inp-row">
+      <div class="inp-wrap">
+        <div class="inp-lbl">实际长度</div>
+        <input id="ref-num" type="number" inputmode="decimal" placeholder="0" min="0.01">
+      </div>
+      <div class="unit-col">
+        <button class="u-btn on" id="u-cm">cm</button>
+        <button class="u-btn" id="u-m">m</button>
+        <button class="u-btn" id="u-mm">mm</button>
+      </div>
+    </div>
+    <div class="sheet-btns">
+      <button class="s-sec" id="s-sec">重新标记</button>
+      <button class="s-pri" id="s-ok" disabled>确认 →</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State
+let phase='home', photoURL=null, loadedImg=null;
+let refPts=[], refUnit='cm', scale=null;
+let lines=[], anchor=null, camStream=null;
+const video=document.getElementById('video');
+const cv=document.getElementById('cv');
+const ctx=cv.getContext('2d');
+
+// ── Screen
+function show(id){
+  document.querySelectorAll('.scr').forEach(s=>s.classList.remove('on'));
+  document.getElementById(id).classList.add('on');
+}
+
+// ── Camera
+function stopCam(){
+  video.style.display='none';
+  document.getElementById('cam-overlay').style.display='none';
+  video.srcObject=null;
+  if(camStream){camStream.getTracks().forEach(t=>t.stop());camStream=null;}
+}
+
+async function startCam(){
+  if(camStream) return;
+  const shutter=document.getElementById('shutter');
+  shutter.disabled=true; shutter.style.opacity='.35';
+  video.style.display='block';
+  document.getElementById('cam-overlay').style.display='block';
+  show('s-cam');
+  try{
+    camStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+    video.srcObject=camStream;
+    video.muted=true;
+    await new Promise(res=>{
+      if(video.readyState>=3) res();
+      else video.oncanplay=()=>{video.oncanplay=null;res();};
+    });
+    await video.play().catch(()=>{video.muted=true;return video.play().catch(()=>{});});
+    shutter.disabled=false; shutter.style.opacity='1';
+  }catch(e){
+    stopCam(); show('s-home');
+    const err=document.getElementById('home-err');
+    err.textContent='⚠ '+e.message; err.style.display='block';
+  }
+}
+
+// ── Snap: try takePhoto → grabFrame → drawImage fallbacks
+async function snap(){
+  if(!camStream) return;
+  const shutter=document.getElementById('shutter');
+  shutter.disabled=true;
+  try{
+    const track=camStream.getVideoTracks()[0];
+    const ic=new ImageCapture(track);
+    let blob=null;
+    // Method 1: takePhoto (hardware, best quality)
+    try{ blob=await ic.takePhoto(); }catch(_){}
+    if(blob){
+      photoURL=await new Promise(res=>{
+        const r=new FileReader(); r.onload=e=>res(e.target.result); r.readAsDataURL(blob);
+      });
+    } else {
+      // Method 2: grabFrame (CPU bitmap)
+      try{
+        const bmp=await ic.grabFrame();
+        const c=document.createElement('canvas');
+        c.width=bmp.width; c.height=bmp.height;
+        c.getContext('2d').drawImage(bmp,0,0);
+        bmp.close();
+        photoURL=c.toDataURL('image/jpeg',.93);
+      }catch(_){
+        // Method 3: drawImage fallback
+        const W=video.videoWidth||1280, H=video.videoHeight||720;
+        const c=document.createElement('canvas');
+        c.width=W; c.height=H;
+        c.getContext('2d').drawImage(video,0,0,W,H);
+        photoURL=c.toDataURL('image/jpeg',.93);
+      }
+    }
+  }catch(e){ shutter.disabled=false; shutter.style.opacity='1'; return; }
+  loadedImg=null; stopCam();
+  refPts=[];lines=[];anchor=null;scale=null;
+  show('s-msr'); setPhase('ref-tap');
+}
+
+// ── Draw
+function draw(){
+  if(!photoURL) return;
+  const paint=img=>{
+    cv.width=img.naturalWidth; cv.height=img.naturalHeight;
+    const W=cv.width,H=cv.height,u=Math.min(W,H)*.013;
+    const R=Math.max(10,u),LW=Math.max(2.5,u*.3),FS=Math.max(28,u*3.2);
+    ctx.drawImage(img,0,0);
+
+    const dot=(x,y,c)=>{
+      const g=ctx.createRadialGradient(x,y,0,x,y,R*5);
+      g.addColorStop(0,c+'55');g.addColorStop(1,'transparent');
+      ctx.beginPath();ctx.arc(x,y,R*5,0,Math.PI*2);ctx.fillStyle=g;ctx.fill();
+      ctx.beginPath();ctx.arc(x,y,R*2.2,0,Math.PI*2);
+      ctx.strokeStyle='rgba(255,255,255,.85)';ctx.lineWidth=LW*1.4;ctx.stroke();
+      ctx.beginPath();ctx.arc(x,y,R,0,Math.PI*2);ctx.fillStyle=c;ctx.fill();
+      const d=R*4;ctx.strokeStyle=c;ctx.lineWidth=LW*.9;
+      [[x-d,y,x-R*2.5,y],[x+R*2.5,y,x+d,y],[x,y-d,x,y-R*2.5],[x,y+R*2.5,x,y+d]]
+        .forEach(([x1,y1,x2,y2])=>{ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();});
+    };
+    const seg=(p1,p2,c,lbl)=>{
+      ctx.save();
+      const a=Math.atan2(p2.y-p1.y,p2.x-p1.x),perp=a+Math.PI/2,cap=R*3;
+      ctx.beginPath();ctx.moveTo(p1.x,p1.y);ctx.lineTo(p2.x,p2.y);
+      ctx.strokeStyle=c;ctx.lineWidth=LW*2.2;ctx.setLineDash([u*1.7,u*.9]);ctx.stroke();ctx.setLineDash([]);
+      [p1,p2].forEach(p=>{
+        ctx.beginPath();
+        ctx.moveTo(p.x+Math.cos(perp)*cap,p.y+Math.sin(perp)*cap);
+        ctx.lineTo(p.x-Math.cos(perp)*cap,p.y-Math.sin(perp)*cap);
+        ctx.strokeStyle='rgba(255,255,255,.9)';ctx.lineWidth=LW*2.8;ctx.stroke();
+      });
+      if(lbl){
+        const mx=(p1.x+p2.x)/2,my=(p1.y+p2.y)/2;
+        ctx.font=`bold ${FS}px 'Courier New',monospace`;
+        ctx.textAlign='center';ctx.textBaseline='middle';
+        const tw=ctx.measureText(lbl).width,pad=FS*.5,bh=FS*1.6,bw=tw+pad*2,bx=mx-bw/2,by=my-bh/2,br=12;
+        ctx.shadowColor='#000';ctx.shadowBlur=20;
+        ctx.beginPath();
+        ctx.moveTo(bx+br,by);ctx.lineTo(bx+bw-br,by);ctx.quadraticCurveTo(bx+bw,by,bx+bw,by+br);
+        ctx.lineTo(bx+bw,by+bh-br);ctx.quadraticCurveTo(bx+bw,by+bh,bx+bw-br,by+bh);
+        ctx.lineTo(bx+br,by+bh);ctx.quadraticCurveTo(bx,by+bh,bx,by+bh-br);
+        ctx.lineTo(bx,by+br);ctx.quadraticCurveTo(bx,by,bx+br,by);ctx.closePath();
+        ctx.fillStyle='rgba(4,4,8,.93)';ctx.fill();
+        ctx.shadowBlur=0;ctx.strokeStyle=c;ctx.lineWidth=2.5;ctx.stroke();
+        ctx.fillStyle=c;ctx.fillText(lbl,mx,my);
+      }
+      ctx.restore();
+    };
+    refPts.forEach(p=>dot(p.x,p.y,'#C8F500'));
+    if(refPts.length===2)seg(refPts[0],refPts[1],'#C8F500',scale?'基准 ✓':'基准');
+    lines.forEach(l=>{
+      const v=l.value,lb=v>=100?`${(v/100).toFixed(2)} m`:`${v.toFixed(1)} cm`;
+      seg(l.p1,l.p2,'#3BC5FF',lb);dot(l.p1.x,l.p1.y,'#3BC5FF');dot(l.p2.x,l.p2.y,'#3BC5FF');
+    });
+    if(anchor)dot(anchor.x,anchor.y,'#FF6B35');
+  };
+  if(loadedImg){paint(loadedImg);}
+  else{const img=new Image();img.onload=()=>{loadedImg=img;paint(img);};img.src=photoURL;}
+}
+
+// ── Tap on canvas
+function tap(e){
+  e.preventDefault();
+  const rect=cv.getBoundingClientRect();
+  const t=e.touches?e.touches[0]:e;
+  const pt={x:(t.clientX-rect.left)*(cv.width/rect.width),y:(t.clientY-rect.top)*(cv.height/rect.height)};
+  if(phase==='ref-tap'){
+    refPts.push(pt);
+    if(refPts.length===2) setPhase('ref-input');
+    else updateRefHint();
+    draw();
+  } else if(phase==='measure'){
+    if(!anchor){anchor=pt;}
+    else{
+      const dx=pt.x-anchor.x,dy=pt.y-anchor.y;
+      lines.push({p1:anchor,p2:pt,value:Math.sqrt(dx*dx+dy*dy)/scale});
+      anchor=null; updateMsrUI();
+    }
+    draw();
+  }
+}
+cv.addEventListener('touchstart',tap,{passive:false});
+cv.addEventListener('click',tap);
+
+// ── Phase
+function setPhase(p){
+  phase=p;
+  document.getElementById('nav-t').textContent=p==='measure'?'测量距离':'设置基准';
+  document.getElementById('hint-ref').classList.toggle('on',p==='ref-tap');
+  document.getElementById('hint-msr').classList.toggle('on',p==='measure');
+  document.getElementById('p-ref').classList.toggle('on',p==='ref-tap');
+  document.getElementById('p-msr').classList.toggle('on',p==='measure');
+  if(p==='ref-tap') updateRefHint();
+  if(p==='ref-input') openSheet();
+  if(p==='measure') updateMsrUI();
+  draw();
+}
+
+function updateRefHint(){
+  document.getElementById('hint-ref-h').textContent=refPts.length===0?'① 点击参考物体的起点':'② 点击参考物体的终点';
+  document.getElementById('ref-undo-btn').style.display=refPts.length>0?'block':'none';
+}
+
+function updateMsrUI(){
+  const has=lines.length>0||!!anchor;
+  document.getElementById('nav-undo').classList.toggle('show',has);
+  document.getElementById('undo-msr').style.display=has?'block':'none';
+  document.getElementById('empty-hint').style.display=lines.length===0&&!anchor?'block':'none';
+  document.getElementById('anchor-card').style.display=anchor?'flex':'none';
+  const hh=document.getElementById('hint-msr-h');
+  if(anchor){hh.textContent='🎯 再点击终点完成测量';hh.style.color='var(--org)';}
+  else{hh.textContent='点击起点开始测量';hh.style.color='var(--blue)';}
+  document.getElementById('hint-msr-b').textContent=`已完成 ${lines.length} 条测量`;
+  const list=document.getElementById('results-list');
+  list.innerHTML='';
+  if(lines.length>0){
+    list.innerHTML='<div class="sec-title">测量结果</div>';
+    lines.forEach((l,i)=>{
+      const v=l.value,lb=v>=100?`${(v/100).toFixed(2)} m`:`${v.toFixed(1)} cm`;
+      const d=document.createElement('div');
+      d.className='result-card';
+      d.style.animation='fadein .22s ease';
+      d.innerHTML=`<div style="display:flex;align-items:center"><div class="r-badge">${i+1}</div><span style="font-size:12px;color:var(--muted)">测量 ${i+1}</span></div><div class="r-val">${lb}</div>`;
+      list.appendChild(d);
+    });
+  }
+}
+
+// ── Sheet
+function openSheet(){
+  document.getElementById('ref-num').value='';
+  document.getElementById('s-ok').disabled=true;
+  document.getElementById('sheet-mask').classList.add('on');
+  setTimeout(()=>document.getElementById('ref-num').focus(),300);
+}
+function closeSheet(){document.getElementById('sheet-mask').classList.remove('on');}
+document.getElementById('ref-num').addEventListener('input',function(){
+  document.getElementById('s-ok').disabled=!(this.value&&parseFloat(this.value)>0);
+});
+document.getElementById('ref-num').addEventListener('keydown',e=>{if(e.key==='Enter')confirmRef();});
+document.getElementById('sheet-mask').addEventListener('click',e=>{
+  if(e.target===document.getElementById('sheet-mask')){closeSheet();setPhase('ref-tap');}
+});
+function setUnit(u){
+  refUnit=u;['cm','m','mm'].forEach(x=>document.getElementById('u-'+x).classList.toggle('on',x===u));
+}
+function confirmRef(){
+  const v=parseFloat(document.getElementById('ref-num').value);
+  if(refPts.length===2&&v>0){
+    const dx=refPts[1].x-refPts[0].x,dy=refPts[1].y-refPts[0].y;
+    scale=Math.sqrt(dx*dx+dy*dy)/v;
+    closeSheet(); setPhase('measure');
+  }
+}
+
+// ── Controls
+function undo(){
+  if(anchor){anchor=null;draw();updateMsrUI();return;}
+  if(lines.length){lines.pop();draw();updateMsrUI();}
+}
+function resetRef(){refPts=[];scale=null;lines=[];anchor=null;setPhase('ref-tap');}
+function goHome(){stopCam();photoURL=null;loadedImg=null;refPts=[];lines=[];anchor=null;scale=null;show('s-home');}
+
+// ── Bind buttons
+function bind(id,fn){
+  const el=document.getElementById(id);
+  if(!el)return;
+  el.onclick=fn;
+  el.addEventListener('touchstart',e=>{e.preventDefault();fn(e);},{passive:false});
+}
+bind('btn-start',  startCam);
+bind('btn-cancel', ()=>{stopCam();show('s-home');});
+bind('shutter',    snap);
+bind('btn-back',   goHome);
+bind('nav-undo',   undo);
+bind('ref-undo-btn',()=>{refPts=[];draw();updateRefHint();});
+bind('undo-msr',   undo);
+bind('btn-reset-ref',resetRef);
+bind('btn-rehome', goHome);
+bind('s-sec', ()=>{refPts=[];closeSheet();setPhase('ref-tap');});
+bind('s-ok',  confirmRef);
+bind('u-cm',()=>setUnit('cm'));
+bind('u-m', ()=>setUnit('m'));
+bind('u-mm',()=>setUnit('mm'));
+
+// Home screen tap anywhere
+document.getElementById('s-home').addEventListener('touchstart',e=>{
+  if(e.target===document.getElementById('s-home')||e.target===document.querySelector('.home-inner'))
+    {e.preventDefault();startCam();}
+},{passive:false});
+</script>
+</body>
+</html>
